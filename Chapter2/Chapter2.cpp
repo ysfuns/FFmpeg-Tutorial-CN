@@ -147,6 +147,7 @@ int main(int argc, char** argv)
 	packet = (AVPacket *)av_malloc(sizeof(AVPacket));
 	av_init_packet(packet);
 	int i = 0;
+	SDL_Event event;
 	while (av_read_frame(pFormatCtx, packet) >= 0)
 	{
 		if (packet->stream_index != videoStream)
@@ -155,12 +156,13 @@ int main(int argc, char** argv)
 			av_init_packet(packet);
 			continue;
 		}
-		ret = avcodec_send_packet(pCodecCtx, packet);
+		ret = avcodec_send_packet(pCodecCtx, packet);//发送编码数据包
 		if (ret < 0)
 			continue;
 		/* 获取帧数据*/
-		do {
-			ret = avcodec_receive_frame(pCodecCtx, pFrame);
+		do 
+		{
+			ret = avcodec_receive_frame(pCodecCtx, pFrame);//接收解码数据包
 			if (ret < 0)
 				break;
 			else if (ret == 0) //成功的获取到了解码后一帧数据
@@ -191,6 +193,16 @@ int main(int argc, char** argv)
 				break;
 			}
 		} while (ret != AVERROR(EAGAIN));
+
+		SDL_PollEvent(&event);
+		switch (event.type) {
+		case SDL_QUIT:
+			SDL_Quit();
+			exit(0);
+			break;
+		default:
+			break;
+		}
 	}
 
 
@@ -203,6 +215,5 @@ int main(int argc, char** argv)
 
 	getchar();
 	return 0;
-    return 0;
 }
 
