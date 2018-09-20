@@ -17,11 +17,13 @@ extern "C" {
 #pragma comment(lib, "swscale.lib")
 #pragma comment(lib, "avutil.lib")
 #pragma comment(lib, "avcodec.lib")
-
 #pragma comment(lib, "swresample.lib")
-
 #pragma comment(lib, "SDL2.lib")
 #pragma comment(lib, "SDL2main.lib")
+
+
+//#define TEXT_1 1
+
 
 #define SDL_AUDIO_BUFFER_SIZE 1024
 #define MAX_AUDIO_FRAME_SIZE 192000
@@ -44,6 +46,10 @@ int packet_queue_put(PacketQueue *q, AVPacket *pkt);
 static int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block);
 void audio_callback(void *userdata, Uint8 *stream, int len);
 int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf, int buf_size);
+void  fill_audio_callback(void *udata, Uint8 *stream, int len);
+static  Uint8  *audio_chunk;
+static  Uint32  audio_len;
+static  Uint8  *audio_pos;
 
 int main(int argc, char** argv)
 {
@@ -179,14 +185,24 @@ int main(int argc, char** argv)
 		fprintf(stderr, "Unsupported codec!\n");
 		return -1;
 	}
-	avcodec_open2(aCodecCtx, aCodec,NULL);
+	ret = avcodec_open2(aCodecCtx, aCodec,NULL);
+	if (ret<0)
+	{
+		return -1;
+	}
 	SDL_AudioSpec   wanted_spec, spec;
 	wanted_spec.freq = aCodecCtx->sample_rate;//采样率
 	wanted_spec.format = AUDIO_S16SYS;//格式，S16SYS中的S代表有符号的signed，16表示每个样本是16位的，SYS表示大小端的顺序是与使用的系统相同
 	wanted_spec.channels = aCodecCtx->channels;//音频的通道数
 	wanted_spec.silence = 0;//这是用来表示静音的值。因为音频采样是有符号的，所以 0 当然就是这个值。
 	wanted_spec.samples = aCodecCtx->frame_size;;//这是当我们想要更多音频的时候，我们想让 SDL 给出来的音频缓冲区的尺寸，ffplay使用的是1024
+#ifdef TEXT_1
 	wanted_spec.callback = audio_callback;//回调函数
+#else
+	wanted_spec.callback = fill_audio_callback;//回调函数
+#endif // 
+
+
 	wanted_spec.userdata = aCodecCtx;//SDL供给回调函数运行的参数
 	if (SDL_OpenAudio(&wanted_spec, &spec) < 0) 
 	{
@@ -207,6 +223,10 @@ int main(int argc, char** argv)
 	int out_channels = av_get_channel_layout_nb_channels(out_channel_layout);
 	//Out Buffer Size
 	int out_buffer_size = av_samples_get_buffer_size(NULL, out_channels, out_nb_samples, out_sample_fmt, 1);
+
+	uint8_t			*out_buffer_audio;
+	out_buffer_audio = (uint8_t *)av_malloc(MAX_AUDIO_FRAME_SIZE * 2);
+
 	int64_t in_channel_layout = av_get_default_channel_layout(aCodecCtx->channels);
 	au_convert_ctx = swr_alloc();
 	au_convert_ctx = swr_alloc_set_opts(au_convert_ctx, out_channel_layout, out_sample_fmt, out_sample_rate,
@@ -226,46 +246,78 @@ int main(int argc, char** argv)
 	{
 		if (packet->stream_index == videoStream)
 		{
-			ret = avcodec_send_packet(pCodecCtx, packet);
-			if (ret < 0)
-				continue;
-			/* 获取帧数据*/
-			do {
-				ret = avcodec_receive_frame(pCodecCtx, pFrame);
-				if (ret < 0)
-					break;
-				else if (ret == 0) //成功的获取到了解码后一帧数据
-				{
-					//将一帧数据转换成YUV数据
-					sws_scale(img_convert_ctx, (const uint8_t* const*)pFrame->data, pFrame->linesize, 0,
-						pCodecCtx->height, pFrameYUV->data, pFrameYUV->linesize);
+			//ret = avcodec_send_packet(pCodecCtx, packet);
+			//if (ret < 0)
+			//	continue;
+			///* 获取帧数据*/
+			//do {
+			//	ret = avcodec_receive_frame(pCodecCtx, pFrame);
+			//	if (ret < 0)
+			//		break;
+			//	else if (ret == 0) //成功的获取到了解码后一帧数据
+			//	{
+			//		//将一帧数据转换成YUV数据
+			//		sws_scale(img_convert_ctx, (const uint8_t* const*)pFrame->data, pFrame->linesize, 0,
+			//			pCodecCtx->height, pFrameYUV->data, pFrameYUV->linesize);
 
-					//SDL渲染YUV数据 
-					//SDL_UpdateTexture(sdlTexture, &sdlRect, pFrameYUV->data[0], pFrameYUV->linesize[0]);
-					//5.设置纹理的数据
-					SDL_UpdateYUVTexture(sdlTexture, &sdlRect,
-						pFrameYUV->data[0], pFrameYUV->linesize[0],
-						pFrameYUV->data[1], pFrameYUV->linesize[1],
-						pFrameYUV->data[2], pFrameYUV->linesize[2]);
-					//清除渲染器的数据
-					SDL_RenderClear(sdlRenderer);
-					//6.把纹理的数据复制给渲染器
-					SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
-					//7.显示
-					SDL_RenderPresent(sdlRenderer);
-					//延迟40毫秒，相当于一秒播放25帧图片
-					SDL_Delay(40);
-				}
-				else if (ret == AVERROR_EOF)
-				{
-					avcodec_flush_buffers(pCodecCtx);
-					break;
-				}
-			} while (ret != AVERROR(EAGAIN));
+			//		//SDL渲染YUV数据 
+			//		//SDL_UpdateTexture(sdlTexture, &sdlRect, pFrameYUV->data[0], pFrameYUV->linesize[0]);
+			//		//5.设置纹理的数据
+			//		SDL_UpdateYUVTexture(sdlTexture, &sdlRect,
+			//			pFrameYUV->data[0], pFrameYUV->linesize[0],
+			//			pFrameYUV->data[1], pFrameYUV->linesize[1],
+			//			pFrameYUV->data[2], pFrameYUV->linesize[2]);
+			//		//清除渲染器的数据
+			//		SDL_RenderClear(sdlRenderer);
+			//		//6.把纹理的数据复制给渲染器
+			//		SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, &sdlRect);
+			//		//7.显示
+			//		SDL_RenderPresent(sdlRenderer);
+			//		//延迟40毫秒，相当于一秒播放25帧图片
+			//		SDL_Delay(40);
+			//	}
+			//	else if (ret == AVERROR_EOF)
+			//	{
+			//		avcodec_flush_buffers(pCodecCtx);
+			//		break;
+			//	}
+			//} while (ret != AVERROR(EAGAIN));
 		}
 		else if (packet->stream_index == audioStream)
 		{
+
+#ifdef TEXT_1
+			//方法1，能播，但是有问题
 			packet_queue_put(&audioq, packet);
+#else
+			//方法2
+			ret = avcodec_send_packet(aCodecCtx, packet);//发送编码数据包
+			if (ret < 0)
+			{
+				continue;
+			}
+			do
+			{
+				ret = avcodec_receive_frame(aCodecCtx, pFrame);//接收解码数据包
+				if (ret < 0)
+				{
+					break;
+				}
+				else if (ret == 0)//成功解码
+				{
+					int convert_len = swr_convert(au_convert_ctx, &out_buffer_audio, MAX_AUDIO_FRAME_SIZE, (const uint8_t **)pFrame->data, pFrame->nb_samples);
+					printf("decode len = %d, convert_len = %d\n", packet->size, convert_len);
+				}
+			} while (ret != AVERROR(EAGAIN));
+			while (audio_len > 0)//Wait until finish
+				SDL_Delay(1);
+
+			//Set audio buffer (PCM data)
+			audio_chunk = (Uint8 *)out_buffer_audio;
+			//Audio buffer length
+			audio_len = out_buffer_size;
+			audio_pos = audio_chunk;
+#endif // 
 		}
 		else
 		{
@@ -486,4 +538,19 @@ int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf,int buf_siz
 		audio_pkt_data = pkt.data;
 		audio_pkt_size = pkt.size;
 	}
+}
+
+void  fill_audio_callback(void *udata, Uint8 *stream, int len)
+{
+	//SDL 2.0
+	printf("fill_audio len = %d\n", len);
+	SDL_memset(stream, 0, len);
+	if (audio_len == 0)
+		return;
+
+	len = (len > audio_len ? audio_len : len);	/*  Mix  as  much  data  as  possible  */
+
+	SDL_MixAudio(stream, audio_pos, len, SDL_MIX_MAXVOLUME);
+	audio_pos += len;
+	audio_len -= len;
 }
