@@ -193,7 +193,7 @@ int main(int argc, char** argv)
 				break;
 			}
 		} while (ret != AVERROR(EAGAIN));
-
+		//SDLµÄÊÂ¼þ
 		SDL_PollEvent(&event);
 		switch (event.type) {
 		case SDL_QUIT:
