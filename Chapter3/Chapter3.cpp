@@ -131,7 +131,14 @@ int main(int argc, char* argv[])
 		printf("Could not open codec.\n");
 		return -1;
 	}
-
+	//SDL，
+	//1.初始化 SDL_Init
+	//2.创建窗口 SDL_Window
+	//3.基于窗口创建渲染器 SDL_Renderer
+	//4.纹理 SDL_Texture
+	//5.更新纹理 SDL_UpdateTexture()
+	//6.复制到渲染器 SDL_RenderCopy()
+	//7.显示 SDL_RenderPresent()
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER))//1.初始化SDL
 	{
 		printf("Could not initialize SDL - %s\n", SDL_GetError());
