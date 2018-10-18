@@ -1,6 +1,3 @@
-// ff_sdl_audio.cpp : 定义控制台应用程序的入口点。
-//
-
 #include "stdafx.h"
 
 
@@ -54,15 +51,6 @@ typedef struct PacketQueue
 	SDL_mutex *mutex;//互斥量，上锁和解锁
 	SDL_cond *cond;//条件变量，激活信号和等待信号
 } PacketQueue;
-//typedef struct VideoPicture
-//{
-//	SDL_Texture *bmp;
-//	AVFrame *pFrameYUV;
-//	int width, height; /* source height & width */
-//	int allocated;
-//} VideoPicture;
-
-
 
 typedef struct VideoPicture
 {
@@ -475,7 +463,7 @@ int video_thread(void *arg)
 
 		av_packet_unref(packet);
 	}
-	av_free(pFrame);
+	av_frame_unref(pFrame);
 	return 0;
 }
 
